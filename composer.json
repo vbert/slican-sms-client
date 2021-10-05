@@ -11,7 +11,7 @@
             "Vbert\\SlicanSmsClient\\": 
                 [
                     "src/",
-                    "src/SMSClient"
+                    "src/SmsClient"
                 ]
         }
     },
