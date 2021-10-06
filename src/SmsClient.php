@@ -1,9 +1,51 @@
 <?php
 
-namespace Vbert\SlicanSmsClient;
+namespace Vbert\SmsClient;
 
-class SmsClient {
+use Vbert\SmsClient\Contracts\Client;
+use Vbert\SmsClient\Contracts\Adapter;
 
 
-    public function __construct() {}
+class SmsClient implements Client {
+
+    /**
+     * Adapter to use.
+     *
+     * @var Adapter
+     */
+    private $adapter;
+
+
+    /**
+     * Constructor.
+     *
+     * @param Adapter $adapter
+     * 
+     * @return void
+     */
+    public function __construct(Adapter $adapter) {
+        $this->adapter = $adapter;
+    }
+
+
+    /**
+     * Get the adapter name.
+     *
+     * @return string
+     */
+    public function getAdapter(): string {
+        return $this->adapter->getAdapter();
+    }
+
+
+    /**
+     * Send the message.
+     *
+     * @param array $message
+     *
+     * @return boolean
+     */
+    public function send(array $message): bool {
+        return $this->adapter->sendRequest($message);
+    }
 }

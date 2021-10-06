@@ -10,7 +10,9 @@
             "Vbert\\SmsClient\\": 
                 [
                     "src/",
-                    "src/SmsClient"
+                    "src/Contracts",
+                    "src/Adapters",
+                    "src/Exceptions"
                 ]
         }
     },

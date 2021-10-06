@@ -1,0 +1,4 @@
+[06-Oct-2021 14:30:47 Europe/Warsaw] PHP Fatal error:  Uncaught Error: Class 'PHPUnit\Framework\TestCase' not found in /home/vbert/Sites/html/sms-client/tests/ClientTest.php:10
+Stack trace:
+#0 {main}
+  thrown in /home/vbert/Sites/html/sms-client/tests/ClientTest.php on line 10
