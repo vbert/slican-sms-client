@@ -1,13 +1,13 @@
 {
-    "name": "vbert/slican-sms-client",
+    "name": "vbert/sms-client",
     "description": "PHP client for communication with Slican IPU-14",
     "keywords": ["clientsms", "slican", "php"],
-    "homepage": "https://github.com/vbert/slican-sms-client",
+    "homepage": "https://github.com/vbert/sms-client",
     "type": "library",
     "license": "Apache-2.0",
     "autoload": {
         "psr-4": {
-            "Vbert\\SlicanSmsClient\\": 
+            "Vbert\\SmsClient\\": 
                 [
                     "src/",
                     "src/SmsClient"
@@ -16,7 +16,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Vbert\\SlicanSmsClient\\": "tests/"
+            "Vbert\\SmsClient\\": "tests/"
         }
     },
     "authors": [
