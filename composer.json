@@ -1,6 +1,5 @@
 {
     "name": "vbert/slican-sms-client",
-    "version": "1.0.0",
     "description": "PHP client for communication with Slican IPU-14",
     "keywords": ["clientsms", "slican", "php"],
     "homepage": "https://github.com/vbert/slican-sms-client",
