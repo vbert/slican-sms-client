@@ -5,8 +5,8 @@ namespace Vbert\SmsClient\Adapters;
 
 use Socket;
 use Vbert\SmsClient\Contracts\Adapter;
-use Vbert\SmsClient\Exceptions\AdapterNotConfiguredException;
 use Vbert\SmsClient\Exceptions\NoDataToSendMessage;
+use Vbert\SmsClient\Exceptions\AdapterNotConfiguredException;
 use Vbert\SmsClient\Exceptions\SocketsExtensionIsNotLoadedException;
 
 class Slican implements Adapter {
@@ -14,38 +14,78 @@ class Slican implements Adapter {
     const MSG_EOL = "\r\n";
 
     /**
-     * CTIP Signal Messages
+     * Messages sent to the PBX
      *
      * @var array
      */
-    private $ctipSignalMessages = array(
-        'logi' => array(
+    private $ctipMessagesSentToPBX = array(
+        // Logging in the GSM module operation
+        'aLOGI' => array(
             'command' => 'LOGI',
-            'message' => 'aLOGI G001 %s'.self::MSG_EOL
+            'content' => 'aLOGI G001 %s'.self::MSG_EOL
         ),
-        'logo' => array(
+        // Logging out of GSM module operation
+        'aLOGO' => array(
             'command' => 'LOGO',
-            'message' => 'aLOGO G001'.self::MSG_EOL
+            'content' => 'aLOGO G001'.self::MSG_EOL
         ),
-        'smss' => array(
+        // Sending an SMS
+        'aSMSS' => array(
             'command' => 'SMSS',
-            'message' => 'aSMSS G001 %s C1 N 167 %s'.self::MSG_EOL
+            'content' => 'aSMSS G001 %s C1 N 167 %s'.self::MSG_EOL
         ),
-        'sok' => array(
+        // Acknowledgment of message receipt
+        'aSOK' => array(
             'command' => 'SOK',
-            'message' => 'aSOK G001 %s'.self::MSG_EOL
+            'content' => 'aSOK G001 %s'.self::MSG_EOL
+        )
+    );
+
+    /**
+     * Messages received from the PBX
+     *
+     * @var array
+     */
+    private $ctipMessagesReceivedFromPBX = array(
+        // Confirmation / rejection of sending SMS messages
+        'aSMSA' => array(
+            'command' => 'SMSA',
+            // Type of confirmation
+            'type' => array(
+                // SMS acceptance => Identifier (order number) of the sent message, 
+                //                   assigned by the operator center, enabling association 
+                //                   with SMSR commands. 
+                'C' => 0,
+                // SMS rejection => Error code returned by the operator. For example, 
+                //                  the value of 70 means that the SMS has exceeded its 
+                //                  expiry date. CTIP does not define these values because 
+                //                  they are operator dependent.  
+                'R' => 0
+            )
+        ),
+        // Receiving an SMS
+        'aSMSG' => array(
+            'command' => 'SMSG',
+            // Index of the report in the GSM module memory, counted from the control panel reset 
+            'raportId' => 0,
+            // Date and time of sending the message
+            'dateTime' => 'YYYY-MM-DD HH:MM:SS'
         )
     );
     
+    const RESPONSE_OK = 'OK';
+    const RESPONSE_ERROR = 'ERROR';
+    const RESPONSE_NA = 'NA';
+
     /**
      * CTIP Responses and error messages
      *
      * @var array
      */
     private $ctipResponses = array(
-        'OK' => 'The message was executed correctly.',
-        'ERROR' => 'Query or parameters have invalid syntax or value.',
-        'NA' => array(
+        self::RESPONSE_OK => 'The message was executed correctly.',
+        self::RESPONSE_ERROR => 'Query or parameters have invalid syntax or value.',
+        self::RESPONSE_NA => array(
             0 => 'There is no additional information on the cause of the error.',
             1 => 'No login, log in to the control panel again (in the case of TCP / IP connections disconnect the old TCP / IP connection and establish a new one).',
             2 => 'The handset is hung up.',
@@ -109,12 +149,14 @@ class Slican implements Adapter {
     /**
      * Socket instance
      *
-     * @var \Socket
+     * @var Socket
      */
-    private Socket $socket;
+    private $socket;
 
 
     public function __construct(array $config=[]) {
+        set_time_limit(0);
+
         if (!extension_loaded('sockets')) {
             throw new SocketsExtensionIsNotLoadedException();
         }
@@ -144,16 +186,80 @@ class Slican implements Adapter {
             throw new NoDataToSendMessage();
         }
 
-        try {
-            $this->socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-        } catch(\Exception $ex) {
-            echo $ex->getMessage();
+        $this->ctipCreate();
+        if ($this->ctipLogi() === TRUE) {
+            # code...
         }
-        return true;
+
+        return TRUE;
     }
 
 
-    private function ctipLogIn() {
+    private function ctipCreate(): void {
+        if (($this->socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) === FALSE) {
+            throw new \Exception($this->getSocketError());
+        }
 
+        if (socket_connect($this->socket, $this->host, $this->port) === FALSE) {
+            throw new \Exception($this->getSocketError());
+        }
+    }
+
+
+    private function ctipLogi(): bool {
+        $msg = (object) $this->ctipMessagesSentToPBX['aLOGI'];
+        $content = sprintf($msg->content, $this->pinSimCard);
+        if (socket_send($this->socket, $content, strlen($content), 0) === FALSE) {
+            throw new \Exception($this->getSocketError());
+        }
+        $response = $this->getServerResponse();
+        return $this->isOK($response);
+    }
+
+
+    private function ctipSmss(array $message): bool {
+        $msg = (object) $this->ctipMessagesSentToPBX['aSMSS'];
+        $content = sprintf($msg->content, $message['to'], $message['content']);
+        if (socket_write($this->socket, $content, strlen($content)) === FALSE) {
+            throw new \Exception($this->getSocketError());
+        }
+
+        return FALSE;
+    }
+
+
+    private function getServerResponse(): array {
+        if (($response = socket_read($this->socket, 2048)) === FALSE) {
+            throw new \Exception($this->getSocketError());
+        }
+        if ($response !== '') {
+            return explode(' ', $response);
+        }
+        return array();
+    }
+
+
+    private function isOK(array $response): bool {
+        if (substr($response[0], 1) === self::RESPONSE_OK) {
+            return TRUE;
+        } elseif (substr($response[0], 1) === self::RESPONSE_ERROR) {
+            throw new \Exception($this->getSocketError($this->ctipResponses[self::RESPONSE_ERROR]));
+        } elseif (substr($response[0], 1) === self::RESPONSE_NA) {
+            if (isset($response[1]) && array_key_exists((int) $response[1], $this->ctipResponses[self::RESPONSE_NA])) {
+                throw new \Exception($this->getSocketError($this->ctipResponses[self::RESPONSE_NA][(int) $response[1]]));
+            } else {
+                throw new \Exception($this->getSocketError('No additional information on the cause of the error occurred.'));
+            }
+        }
+        return FALSE;
+    }
+
+
+    private function getSocketError(string $error=''): string {
+        if ($error === '') {
+            return '['. socket_last_error() .'] '. socket_strerror(socket_last_error());
+        } else {
+            return $error;
+        }
     }
 }
